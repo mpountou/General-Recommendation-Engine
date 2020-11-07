@@ -1,2 +1,2 @@
-# RecoM-Recommender-Engine
-A Python Recomender engine made by Mpountou
+# RecoM-Recommendation-Engine
+A Recommendation engine made by Mpountou with love and python
