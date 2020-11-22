@@ -32,6 +32,11 @@ class cf_userbased:
     split_and_predict()
        splits the data to train and test and predicts the test  
     """ 
+  def __init__(self,dataset,columns,input_user,max_neighbors):
+    self.dataset = dataset
+    self.columns = columns
+    self.input_user = input_user
+    self.max_neighbors = max_neighbors
 
   def common_ratings(self,rA,rB):
     # rating index of userA
@@ -42,17 +47,17 @@ class cf_userbased:
     ci = set(iA) & set(iB)
     return list(ci)
 
-  def user_similarities(self,input_user,max_neighbors,matrix):
+  def user_similarities(self,matrix):
     # all users expect input_user
     compared_user = matrix.index.tolist()
-    compared_user.remove(input_user)
+    compared_user.remove(self.input_user)
     # user correlations
     similarities = []
     # total common ratings
     t_common = []
     for i in range(len(compared_user)):
       # get input_user ratings 
-      listA = np.array(matrix.loc[input_user].tolist())
+      listA = np.array(matrix.loc[self.input_user].tolist())
       # get compared_user ratings
       listB = np.array(matrix.loc[compared_user[i]].tolist())
       # get all common index ratings 
@@ -87,39 +92,76 @@ class cf_userbased:
     # convert to numpy
     compared_user = np.array(compared_user)
     # find users with best similarity
-    best_users = compared_user[best_index[:max_neighbors]]
+    best_users = compared_user[best_index[:self.max_neighbors]]
     # find scores of users with best similarity
-    best_scores = discount_cor[best_index[:max_neighbors]]
+    best_scores = discount_cor[best_index[:self.max_neighbors]]
 
     return best_users,best_scores
 
  
+  def recommend(self,itemsToPredict):
+    # create matrix without test data
+    matrix = data_handler.create_matrix(self.dataset,self.columns,fill_unrated_with=0)
+    available_data = matrix.columns
+    #for i in range(len(itemsToPredict)):
+    #  if itemsToPredict[i] not in available_data:
+    #    itemsToPredict.remove(itemsToPredict[i])
+    
+    best_users,best_scores = self.user_similarities(matrix)
+    
+    c,pred = self.predict(matrix,best_users,best_scores,itemsToPredict)
+    df = pd.DataFrame()
+    df[self.columns[1]] = c
+    df['ub_pred'] = pred
+    for i in range(len(itemsToPredict)):
+      if itemsToPredict[i] not in c:
+        itemId = itemsToPredict[i]
+        df = df.append(pd.DataFrame(data=[[itemId,np.nan]],columns=[self.columns[1],'ub_pred']))
 
+    return df
 
-  def split_and_predict(self,input_user,max_neighbors,dataset,columns,test_split_size):
-    if max_neighbors <=0:
+  def split_and_predict(self,test_split_size):
+    if self.max_neighbors <=0:
       print('Neighbor number must be larger than 0')
       return -1,-1
     # split data to train and test set
-    train,test = handler.split(dataset,input_user)
-    train_X = pd.DataFrame(train[columns[:3]])
-    train_y = train[columns[2]].tolist()
-    test_X = test[columns[:3]]
-    test_y = test[columns[2]].tolist()
+    train,test = handler.split(self.dataset,self.input_user)
+    train_X = pd.DataFrame(train[self.columns[:3]])
+    train_y = train[self.columns[2]].tolist()
+    test_X = test[self.columns[:3]]
+    test_y = test[self.columns[2]].tolist()
  
     # create matrix without test data
-    matrix = data_handler.create_matrix(train,columns,fill_unrated_with=0)
+    matrix = data_handler.create_matrix(train,self.columns,fill_unrated_with=0)
     # find most similar users
-    best_users,best_scores = self.user_similarities(input_user,max_neighbors,matrix)
-    # find common ratings for first neighbor
+    best_users,best_scores = self.user_similarities(matrix)
+    
+    common_predict_items,pred = self.predict(matrix,best_users,best_scores,test_X[self.columns[1]])
+
+    # dataframe with pred ratings
+    df1 = pd.DataFrame()
+    df1[columns[1]] = common_predict_items
+    pred = list(map(lambda x: round(x,0),pred))
+    df1['y_pred'] = pred
+
+    # data frame with true ratings
+    df2 = test_X.loc[test_X[self.columns[1]].isin(common_predict_items)][[self.columns[1],self.columns[2]]]
+    df2 = df2.rename(columns={"rating": "y_true"})
+
+    # data frame with both pred and true ratings
+    df = pd.merge(df1,df2,'inner',on=self.columns[1])
+
+    return df
+
+  def predict(self,matrix,best_users,best_scores,itemsToPredict):
     common_indexes = set(np.nonzero(matrix.loc[best_users[0]].tolist())[0])
     # find common ratings for all neighbors
-    if max_neighbors >1:
+    if self.max_neighbors >1:
       for i in range(1,len(best_users)):
         common_indexes = common_indexes & set(np.nonzero(matrix.loc[best_users[i]].tolist())[0])
-   
+
     # find  ratings vector for input user
-    input_user_index = np.array(matrix.loc[input_user].tolist())
+    input_user_index = np.array(matrix.loc[self.input_user].tolist())
     
     # find unrated items
     input_user_index = np.where(input_user_index == 0)[0]
@@ -134,8 +176,8 @@ class cf_userbased:
     common_items = np.array(matrix.columns.tolist())[common_indexes]
 
     # predict test items
-    common_predict_items = list(set(common_items) & set(test_X[columns[1]]))
-    
+    common_predict_items = list(set(common_items) & set(itemsToPredict))
+
     # average ratings of all compared users
     mean_compared_users = []
     for i in range(len(best_users)):
@@ -144,7 +186,7 @@ class cf_userbased:
       mean_compared_users.append(np.mean(ratings[index_rating]))
     
     # index of input user ratings
-    ratings = np.array(matrix.loc[input_user].tolist())
+    ratings = np.array(matrix.loc[self.input_user].tolist())
     index_rating = np.nonzero(ratings)[0]
     
     # average ratings of input user
@@ -170,19 +212,4 @@ class cf_userbased:
         sum1 += weighted_grades[j] * best_scores[j]
         sum2 += best_scores[j]
       pred.append(mean_input_user + sum1/sum2)
-
-    # dataframe with pred ratings
-    df1 = pd.DataFrame()
-    df1[columns[1]] = common_predict_items
-    pred = list(map(lambda x: round(x,0),pred))
-    df1['y_pred'] = pred
-
-    # data frame with true ratings
-    df2 = test_X.loc[test_X[columns[1]].isin(common_predict_items)][[columns[1],columns[2]]]
-    df2 = df2.rename(columns={"rating": "y_true"})
-
-    # data frame with both pred and true ratings
-    df = pd.merge(df1,df2,'inner',on=columns[1])
-
-    return df
- 
+    return common_predict_items,pred
