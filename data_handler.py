@@ -55,9 +55,9 @@ class data_handler:
     # get num of total users
     t_users = df[columns[0]].nunique()
     # init encoder
-    encoder = LabelEncoder()
+    itemencoder = LabelEncoder()
     # item encode
-    df[columns[1]] = encoder.fit_transform(dataset[columns[1]].values)
+    df[columns[1]] = itemencoder.fit_transform(dataset[columns[1]].values)
     # get num of total items
     t_items = df[columns[1]].nunique()
     # typecast rating to float
@@ -66,7 +66,7 @@ class data_handler:
     minmax = (min(df[columns[2]]),max(df[columns[2]]))
 
     # return dataframe,total users, total items, and min-max of ratings
-    return df,t_users,t_items,minmax
+    return df,t_users,t_items,minmax,itemencoder
 
   def split(self,df,input_user):
     # get ratings of input user
@@ -83,6 +83,11 @@ class data_handler:
     train_X = tmp_dataset
     
     # return train and test data
+    return train_X,test_X
+
+  def rec_split(self,df):
+    train_X, test_X, train_y, test_y = train_test_split(df, df.index.tolist(), test_size=0.01, random_state=1)
+     # return train and test data
     return train_X,test_X
 
   def create_matrix(dataset,columns,fill_unrated_with):
