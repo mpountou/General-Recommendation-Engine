@@ -40,7 +40,7 @@ class data_handler:
 
   def loadDataFrame(self):
     # generate dataframe - user,item,rating
-    dataset = pd.read_csv(self.path)
+    dataset = pd.read_pickle(self.path)
 
     # return data with declared columns
     return dataset[self.columns]
@@ -68,11 +68,11 @@ class data_handler:
     # return dataframe,total users, total items, and min-max of ratings
     return df,t_users,t_items,minmax,itemencoder
 
-  def split(self,df,input_user):
+  def split(self,df,input_user,test_size):
     # get ratings of input user
     input_user_data = df.loc[df[self.columns[0]] == input_user]
     # split ratings to test and train
-    train_X, test_X, train_y, test_y = train_test_split(input_user_data, input_user_data.index.tolist(), test_size=0.1, random_state=1)
+    train_X, test_X, train_y, test_y = train_test_split(input_user_data, input_user_data.index.tolist(), test_size=test_size, random_state=1)
     # copy all data
     tmp_dataset = df.copy()
     # remove test data
