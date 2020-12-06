@@ -110,9 +110,9 @@ class cb_nn():
     y_pred = model.predict(test_X)
     
     # result dataframe
-    df = pd.DataFrame(columns=['clothId','y_pred'])
+    df = pd.DataFrame(columns=['clothId','nn_pred'])
     df['clothId'] = test_X.index.tolist()
     #df['y_true'] = test_y
-    df['y_pred'] = y_pred
+    df['nn_pred'] = y_pred
 
     return df
