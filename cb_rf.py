@@ -18,7 +18,7 @@ class cb_rf():
     self.all_clothes = pd.read_pickle('/content/drive/My Drive/clothes_attr.pkl')
     self.rated_clothes = self.all_clothes.copy()
     self.rated_clothes['ratings'] = self.ratings
-    
+  
 
     z = []
     for i in range(4325):
@@ -77,4 +77,50 @@ class cb_rf():
     df['y_pred'] = y_pred
 
     return df
- 
+  def hyb_eval(self,train,test):
+    # init regressor rf
+    regr = RandomForestRegressor(n_estimators=100,criterion='mse', random_state=1)
+    # train 
+    d_train = self.rated_clothes.copy()
+    d_train['rating'] = self.ratings.copy()
+    train_X = d_train.loc[train['clothId'].tolist()]
+    train_y = train_X['rating'].tolist()
+    train_X = train_X.drop(columns='rating')
+    d_test = self.rated_clothes.copy()
+    d_test['rating'] = self.ratings
+    test_X = d_test.loc[test['clothId'].tolist()]
+    test_y = test_X['rating'].tolist()
+    test_X = test_X.drop(columns='rating')
+    # train 
+    regr.fit(train_X,train_y)
+    # predict
+    y_pred = regr.predict(test_X)
+    
+    # result dataframe
+    df = pd.DataFrame(columns=['clothId','rf_pred'])
+    df['clothId'] = test_X.index.tolist()
+    #df['y_true'] = test_y
+    df['rf_pred'] = y_pred
+
+    return df
+
+  def coverage(self):
+    # init regressor rf
+    regr = RandomForestRegressor(n_estimators=100,criterion='mse', random_state=1)
+    # train 
+    regr.fit(self.rated_clothes, self.ratings)
+    # predict
+    y_pred = regr.predict(self.unrated_clothes)
+    # save pred
+    df = pd.DataFrame(columns=['clothId','rf_pred'])
+    df['clothId'] = self.unrated_clothes.index.tolist()
+    df['rf_pred'] = y_pred
+    low_rated = len(df.loc[df['rf_pred'] < 3])
+    high_rated = len(df.loc[df['rf_pred'] >= 3])
+    unrated = 1
+    cov_df = pd.DataFrame()
+    cov_df['high_rated'] = [high_rated]
+    cov_df['low_rated'] = [low_rated]
+    cov_df['unrated'] = [unrated]
+    cov_df['coverage'] = [round((high_rated+low_rated) / unrated , 2)]
+    return cov_df
