@@ -50,6 +50,7 @@ class cf_userbased:
   def user_similarities(self,matrix):
     # all users expect input_user
     compared_user = matrix.index.tolist()
+   
     compared_user.remove(self.input_user)
     # user correlations
     similarities = []
@@ -113,7 +114,9 @@ class cf_userbased:
     df = pd.DataFrame()
     df[self.columns[1]] = c
     df['ub_pred'] = pred
+    
     for i in range(len(itemsToPredict)):
+      
       if itemsToPredict[i] not in c:
         itemId = itemsToPredict[i]
         df = df.append(pd.DataFrame(data=[[itemId,np.nan]],columns=[self.columns[1],'ub_pred']))
@@ -125,7 +128,7 @@ class cf_userbased:
       print('Neighbor number must be larger than 0')
       return -1,-1
     # split data to train and test set
-    train,test = handler.split(self.dataset,self.input_user)
+    train,test = handler.split(self.dataset,self.input_user,test_split_size)
     train_X = pd.DataFrame(train[self.columns[:3]])
     train_y = train[self.columns[2]].tolist()
     test_X = test[self.columns[:3]]
@@ -135,13 +138,12 @@ class cf_userbased:
     matrix = data_handler.create_matrix(train,self.columns,fill_unrated_with=0)
     # find most similar users
     best_users,best_scores = self.user_similarities(matrix)
-    
     common_predict_items,pred = self.predict(matrix,best_users,best_scores,test_X[self.columns[1]])
 
     # dataframe with pred ratings
     df1 = pd.DataFrame()
     df1[columns[1]] = common_predict_items
-    pred = list(map(lambda x: round(x,0),pred))
+    pred = list(map(lambda x: round(x,2),pred))
     df1['y_pred'] = pred
 
     # data frame with true ratings
@@ -213,3 +215,47 @@ class cf_userbased:
         sum2 += best_scores[j]
       pred.append(mean_input_user + sum1/sum2)
     return common_predict_items,pred
+
+  def hyb_eval(self,train,test):
+    # create matrix without test data
+    matrix = data_handler.create_matrix(train,self.columns,fill_unrated_with=0)
+    available_data = matrix.columns
+ 
+    itemsToPredict = test[self.columns[1]].tolist()
+ 
+    best_users,best_scores = self.user_similarities(matrix)
+ 
+    c,pred = self.predict(matrix,best_users,best_scores,itemsToPredict)
+ 
+    df = pd.DataFrame()
+    df[self.columns[1]] = c
+    df['ub_pred'] = pred
+ 
+    for i in range(len(itemsToPredict)):
+      if itemsToPredict[i] not in c:
+        itemId = itemsToPredict[i]
+        df = df.append(pd.DataFrame(data=[[itemId,np.nan]],columns=[self.columns[1],'ub_pred']))
+    return df
+
+  def coverage(self):
+    # get all id items
+    all_items = [i for i in range(4325)]#self.dataset[self.columns[1]].unique()
+    # get rated user items
+    rated_items = self.dataset.loc[ self.dataset[self.columns[0]] == self.input_user][self.columns[1]].tolist()
+    # get unrated
+    unrated_items = list ( set(all_items)  - set(rated_items) )
+    # recommend
+    df  = self.recommend(unrated_items)
+    low_rated = len(df.loc[df['ub_pred'] < 3])
+    high_rated = len(df.loc[df['ub_pred'] >= 3])
+    unrated = len(unrated_items)
+  
+    
+    cov_df = pd.DataFrame()
+    cov_df['high_rated'] = [high_rated]
+    cov_df['low_rated'] = [low_rated]
+    cov_df['unrated'] = [unrated]
+    cov_df['coverage'] = [round((high_rated+low_rated) / unrated , 2)]
+    
+    return cov_df
+    
