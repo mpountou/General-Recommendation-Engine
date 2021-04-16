@@ -1,42 +1,103 @@
+''' 
+@author: Mpountou
+@year: 2020-2021
+'''
+
 # import all libraries
 import pandas as pd
 import numpy as np
 from scipy.stats import pearsonr
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split
-''' 
-@author: Mpountou
-@year: 2020
-'''
- 
-class cf_userbased:
-  """
-    A class to make collaborative user based recommendations
-    ...
-    
-    Attributes
-    ----------
-    input_user : int
-       number of userId
-    max_neighbors : array
-       number of neighbors used for collaborative filtering
-    matrix : 2d-array
-       a user - item with ratings matrix
 
-    Methods
-    -------
-    common_ratings()
-       retruns the indexes of common ratings given of two users
-    user_similarities()
-       returns dataframe for deep learning model based, total users, total items and minmax of ratings
-    split_and_predict()
-       splits the data to train and test and predicts the test  
-    """ 
+class cf_userbased:
+  
   def __init__(self,dataset,columns,input_user,max_neighbors):
     self.dataset = dataset
     self.columns = columns
     self.input_user = input_user
     self.max_neighbors = max_neighbors
+    self.evdf = -1
+    self.recdf = -1
+  def make_recommendation(self):
+    if type( self.recdf) == type(pd.DataFrame()):
+      return  self.recdf
+      # make variables local
+    dataset = self.dataset
+    columns = self.columns
+
+    all_users = dataset[columns[0]].unique()
+    all_items = dataset[columns[1]].unique()
+    matrix = data_handler.create_matrix(dataset,columns,fill_unrated_with=0)
+    df = pd.DataFrame(columns=[columns[0],columns[1],'y_rec'])
+    for i in all_users:
+      u_data = dataset.loc[dataset[columns[0]] == i]
+      rated = u_data[columns[1]].tolist()
+      unrated = list(set(all_items)-set(rated))
+      self.input_user = i
+      best_users,best_scores = self.user_similarities(matrix)
+      rec_items,rec_ratings = self.predict(matrix,best_users,best_scores,unrated)
+  
+      # pred
+      u_df = pd.DataFrame(columns=[columns[0],columns[1],'y_rec'])
+      u_df[columns[0]] = [i for j in range(len(rec_items))]
+      u_df[columns[1]] = rec_items
+      u_df['y_rec'] = rec_ratings
+      df = df.append(u_df)
+
+      # not pred
+      items_left = list(set(unrated) - set(rec_items))
+      u_df = pd.DataFrame(columns=[columns[0],columns[1],'y_rec'])
+      u_df[columns[0]] = [i for j in range(len(items_left))]
+      u_df[columns[1]] = items_left
+      u_df['y_rec'] = [np.nan for j in range(len(items_left))]
+ 
+      df = df.append(u_df)
+      
+    self.recdf = df
+
+    return df  
+  def evaluate_system(self,all_train,all_test):
+    if type( self.evdf) == type(pd.DataFrame()):
+      return  self.evdf
+    # make variables local
+    dataset = self.dataset
+    columns = self.columns
+
+    all_users = dataset[columns[0]].unique()
+    all_items = dataset[columns[1]].unique()
+
+    matrix = data_handler.create_matrix(all_train,columns,fill_unrated_with=0)
+    df = pd.DataFrame(columns=[columns[0],columns[1],'y_pred','y_true'])
+    for i in all_users:
+      u_train = all_train.loc[all_train[columns[0]] == i]
+      u_test = all_test.loc[all_test[columns[0]] == i]
+      self.input_user = i
+      best_users,best_scores = self.user_similarities(matrix)
+      pred_items,pred_ratings = self.predict(matrix,best_users,best_scores,u_test[columns[1]])
+
+      # pred
+      u_df = pd.DataFrame(columns=[columns[0],columns[1],'y_pred','y_true'])
+      u_df[columns[0]] = [i for j in range(len(pred_items))]
+      u_df[columns[1]] = pred_items
+      u_df['y_pred'] = pred_ratings
+      u_rem = u_test.copy()
+      u_df['y_true'] = u_rem.set_index(keys=columns[1]).loc[pred_items][columns[2]].tolist()
+      df = df.append(u_df)
+
+      # not pred
+      items_left = list(set(u_test[columns[1]].tolist()) - set(pred_items))
+      u_df = pd.DataFrame(columns=[columns[0],columns[1],'y_pred','y_true'])
+      u_df[columns[0]] = [i for j in range(len(items_left))]
+      u_df[columns[1]] = items_left
+      u_df['y_pred'] = [np.nan for j in range(len(items_left))]
+      u_rem = u_test.copy()
+      u_df['y_true'] = u_rem.set_index(keys=columns[1]).loc[items_left][columns[2]].tolist()
+      df = df.append(u_df)
+  
+    df = df.reset_index().drop(columns='index')
+    self.evdf = df
+    return df
 
   def common_ratings(self,rA,rB):
     # rating index of userA
@@ -122,7 +183,39 @@ class cf_userbased:
         df = df.append(pd.DataFrame(data=[[itemId,np.nan]],columns=[self.columns[1],'ub_pred']))
 
     return df
+  def sys_eval(self,test_split_size):
+    if self.max_neighbors <=0:
+      print('Neighbor number must be larger than 0')
+      return -1,-1
+    all_df = []
+    for i in range(100):
+      # split data to train and test set
+      train,test = handler.split(self.dataset,i,test_split_size)
+      train_X = pd.DataFrame(train[self.columns[:3]])
+      train_y = train[self.columns[2]].tolist()
+      test_X = test[self.columns[:3]]
+      test_y = test[self.columns[2]].tolist()
+  
+      # create matrix without test data
+      matrix = data_handler.create_matrix(train,self.columns,fill_unrated_with=0)
+      # find most similar users
+      best_users,best_scores = self.user_similarities(matrix)
+      common_predict_items,pred = self.predict(matrix,best_users,best_scores,test_X[self.columns[1]])
 
+      # dataframe with pred ratings
+      df1 = pd.DataFrame()
+      df1[columns[1]] = common_predict_items
+      pred = list(map(lambda x: round(x,2),pred))
+      df1['y_pred'] = pred
+      df1[self.columns[1]] = df1[self.columns[1]].astype('float64')
+      # data frame with true ratings
+      df2 = test_X.loc[test_X[self.columns[1]].isin(common_predict_items)][[self.columns[1],self.columns[2]]]
+      df2 = df2.rename(columns={"rating": "y_true"})
+      df2[self.columns[1]] = df2[self.columns[1]].astype('float64')
+      # data frame with both pred and true ratings
+      df = pd.merge(df1,df2,'inner',on=self.columns[1])
+      all_df.append(df)
+    return all_df
   def split_and_predict(self,test_split_size):
     if self.max_neighbors <=0:
       print('Neighbor number must be larger than 0')
@@ -143,13 +236,14 @@ class cf_userbased:
     # dataframe with pred ratings
     df1 = pd.DataFrame()
     df1[columns[1]] = common_predict_items
+    df1[self.columns[1]] = df1[self.columns[1]].astype('float64')
     pred = list(map(lambda x: round(x,2),pred))
     df1['y_pred'] = pred
 
     # data frame with true ratings
     df2 = test_X.loc[test_X[self.columns[1]].isin(common_predict_items)][[self.columns[1],self.columns[2]]]
     df2 = df2.rename(columns={"rating": "y_true"})
-
+    df2[self.columns[1]] = df2[self.columns[1]].astype('float64')
     # data frame with both pred and true ratings
     df = pd.merge(df1,df2,'inner',on=self.columns[1])
 
@@ -237,25 +331,69 @@ class cf_userbased:
         df = df.append(pd.DataFrame(data=[[itemId,np.nan]],columns=[self.columns[1],'ub_pred']))
     return df
 
-  def coverage(self):
-    # get all id items
-    all_items = [i for i in range(4325)]#self.dataset[self.columns[1]].unique()
-    # get rated user items
-    rated_items = self.dataset.loc[ self.dataset[self.columns[0]] == self.input_user][self.columns[1]].tolist()
-    # get unrated
-    unrated_items = list ( set(all_items)  - set(rated_items) )
-    # recommend
-    df  = self.recommend(unrated_items)
-    low_rated = len(df.loc[df['ub_pred'] < 3])
-    high_rated = len(df.loc[df['ub_pred'] >= 3])
-    unrated = len(unrated_items)
-  
+  def coverage(self,threshold):
+    # make variables local
+    dataset = self.dataset
+    columns = self.columns
+
+    if type(self.recdf)  != type(pd.DataFrame()):
+      pred_ratings = self.make_recommendation()
+    else:
+      pred_ratings = self.recdf
+
+    already_rated = len(dataset)
+    
+    high_rated = len(pred_ratings.loc[pred_ratings['y_rec']>threshold])
+    
+    low_rated = len(pred_ratings.loc[pred_ratings['y_rec']<=threshold])
+
+    unrated = len(pred_ratings.loc[np.isnan(pred_ratings['y_rec'])])
     
     cov_df = pd.DataFrame()
-    cov_df['high_rated'] = [high_rated]
-    cov_df['low_rated'] = [low_rated]
-    cov_df['unrated'] = [unrated]
-    cov_df['coverage'] = [round((high_rated+low_rated) / unrated , 2)]
+
+    cov_df['recommended'] = [high_rated]
+
+    cov_df['not recommended'] = [low_rated]
+
+    cov_df['cannot recommended'] = [unrated]
+
+    cov_df['already rated'] = [already_rated]
     
     return cov_df
     
+  def novelty(self,threshold,cat_,translator_=False):
+    # make variables local
+    dataset = self.dataset
+    columns = self.columns
+
+    if type(self.recdf) != type(pd.DataFrame()):
+      pred_ratings = self.make_recommendation()
+    else:
+      pred_ratings = self.recdf
+
+    pred_ratings = pred_ratings.merge(cat_,on=columns[1],how='inner')
+
+    categories = pred_ratings['category'].unique()
+
+    c_ratings = []
+    for i in range(len(categories)):
+      ratings = []
+      fr = pred_ratings.loc[pred_ratings['category'] == categories[i]]
+      ratings.append(round(len(fr.loc[fr['y_rec'] >=threshold])  / len(fr.loc[fr['y_rec'] >=0]),2) )
+      ratings.append(round(len(fr.loc[fr['y_rec'] <threshold])  / len(fr.loc[fr['y_rec'] >=0]) ,2))
+      c_ratings.append(ratings)
+
+    df = pd.DataFrame(data=c_ratings , columns=['προτείνεται','δεν προτείνεται'])
+    if type(translator_) == bool:
+      return df
+
+    categories_gr = []
+ 
+    for i in range(len(categories)):
+      categories_gr.append(translator_.loc[translator_['category'] == categories[i]].index.tolist()[0])
+    df['κατηγορίες'] = categories_gr
+
+    df = df.set_index(keys='κατηγορίες')
+
+    return df
+# 5.5
