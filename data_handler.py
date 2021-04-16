@@ -1,37 +1,17 @@
+''' 
+@author: Mpountou
+@year: 2020-2021
+'''
+
 # import all libraries
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-''' 
-@author: Mpountou
-@year: 2020
-'''
+ 
  
 class data_handler:
-  """
-    A class to handle and preprocess data before make recommendation
-    ...
-    
-    Attributes
-    ----------
-    path : str
-       location directory file of data 
-    columns : array
-       array of columns that should keep from data 
-    
-    Methods
-    -------
-    loadDataFrame()
-       retruns dataframe based on path and columns
-    deep_preprocessing()
-       returns dataframe for deep learning model based, total users, total items and minmax of ratings
-    split()
-       splits the data given the user input 
-    create_matrix()
-       creates a user - item matrix given the user item dataframe 
-  
-    """ 
+
   def __init__(self,path,columns):
     # make path global
     self.path = path
@@ -66,7 +46,7 @@ class data_handler:
     minmax = (min(df[columns[2]]),max(df[columns[2]]))
 
     # return dataframe,total users, total items, and min-max of ratings
-    return df,t_users,t_items,minmax,itemencoder
+    return df,t_users,t_items,minmax,itemencoder,encoder
 
   def split(self,df,input_user,test_size):
     # get ratings of input user
