@@ -15,4 +15,4 @@ Models available :
 
 # Prerequisites
 
-There are no prerequisites you can run all features using Google Colab from directory source_code/python_notebooks
+There are no prerequisites you can run all features using Google Colab from directory /source_code/python_notebooks
